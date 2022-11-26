@@ -8,6 +8,9 @@ DOMAIN=*.apps-crc.testing
 OPENSSL_CNF=/etc/ssl/openssl.cnf
 
 if [ ! -f rootCA.key ]; then 
+    echo "------------------------------------------------------------------------------"
+    echo " rootCA"
+    echo "------------------------------------------------------------------------------"
     openssl genrsa -out rootCA.key 4096
     openssl req -x509 \
     -new -nodes \
@@ -21,6 +24,9 @@ if [ ! -f rootCA.key ]; then
     -config <(cat ${OPENSSL_CNF} \
         <(printf '[SAN]\nbasicConstraints=critical, CA:TRUE\nkeyUsage=keyCertSign, cRLSign, digitalSignature'))
 
+    echo "------------------------------------------------------------------------------"
+    echo " intermediate"
+    echo "------------------------------------------------------------------------------"
     openssl genrsa -out intermediate.key 2048
     openssl req \
         -new -nodes \
@@ -33,97 +39,47 @@ if [ ! -f rootCA.key ]; then
         <(printf '[SAN]\nbasicConstraints=critical, CA:TRUE\nkeyUsage=keyCertSign, cRLSign, digitalSignature')) \
         -out intermediate.csr
 
+    echo "------------------------------------------------------------------------------"
+    echo " intermediate crt"
+    echo "------------------------------------------------------------------------------"
     openssl req -x509 \
         -sha256 \
         -days 1000 \
         -in intermediate.csr \
+        -copy_extensions copyall \
         -CA rootCA.crt \
         -CAkey rootCA.key \
         -out intermediate.crt
 
-
+    echo "------------------------------------------------------------------------------"
+    echo " leaf"
+    echo "------------------------------------------------------------------------------"
     openssl genrsa -out domain.key 2048
     openssl req -new -sha256 \
         -key domain.key \
-        -subj "/O=CRC/CN=${DOMAIN}" \
+        -subj /CN="cert-manager v1.0" \
         -reqexts SAN \
+        -extensions SAN \
         -config <(cat ${OPENSSL_CNF} \
-            <(printf "\n[SAN]\nsubjectAltName=DNS:${DOMAIN}\nbasicConstraints=critical, CA:TRUE\nkeyUsage=digitalSignature, keyEncipherment, keyAgreement, dataEncipherment\nextendedKeyUsage=serverAuth")) \
+          <(printf '[SAN]\nbasicConstraints=critical, CA:TRUE\nkeyUsage=keyCertSign, cRLSign, digitalSignature')) \
         -out domain.csr
 
     openssl x509 \
         -req \
         -sha256 \
-        -extfile <(printf "subjectAltName=DNS:${DOMAIN}\nbasicConstraints=critical, CA:TRUE\nkeyUsage=digitalSignature, keyEncipherment, keyAgreement, dataEncipherment\nextendedKeyUsage=serverAuth") \
         -days 365 \
         -in domain.csr \
+        -copy_extensions copyall \
         -CA intermediate.crt \
         -CAkey intermediate.key \
-        -CAcreateserial -out domain.crt
+        -out domain.crt
 
     cat intermediate.crt >> domain.crt
-    #cat rootCA.crt >> domain.crt
+    cat rootCA.crt >> domain.crt
 fi
-echo "------------------------------------------------------------------------------"
-
-#-x509_strict
-openssl verify  -CAfile rootCA.crt -untrusted intermediate.crt domain.crt
 
 echo "------------------------------------------------------------------------------"
+echo "openssl verify -x509_strict -CAfile rootCA.crt -untrusted intermediate.crt domain.crt"
+openssl verify -x509_strict -CAfile rootCA.crt -untrusted intermediate.crt domain.crt
+echo "------------------------------------------------------------------------------"
 
-minikube status > /dev/null || {
-    minikube start --addons=ingress --vm=true --memory=6144 --cpus=4
-} 
-
-kubectl get namespace sandbox > /dev/null 2>&1 && kubectl delete namespace sandbox
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.1/cert-manager.yaml
-sleep 30 
-
-
-kubectl create -f - <<EOF
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    kubernetes.io/metadata.name: sandbox
-  name: sandbox
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ca-key-pair
-  namespace: sandbox
-data:
-  tls.crt: $(cat domain.crt | base64 -w0)
-  tls.key: $(cat domain.key | base64 -w0)
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: ca-issuer
-  namespace: sandbox
-spec:
-  ca:
-    secretName: ca-key-pair
-EOF
-
-echo "kubectl get issuers ca-issuer -n sandbox -o wide"
-kubectl get issuers ca-issuer -n sandbox -o wide
-export IMAGE_NAME=test-cert
-kubectl create -f - <<EOF
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: ${IMAGE_NAME}
-spec:
-  commonName: gateway.com
-  dnsNames:
-    - 192.168.0.1
-  issuerRef:
-    kind: Issuer
-    name: ca-issuer
-  secretName: ${IMAGE_NAME}-tls-secret
-EOF
-sleep 5
-kubectl get certificates test-cert -oyaml
