@@ -48,7 +48,7 @@ kubectl get clusterissuers ca-issuer -n cert-manager -o wide
 
 export IMAGE_NAME=test-cert
 kubectl delete secret ${IMAGE_NAME}-tls-secret -n sandbox > /dev/null 2>&1
-kubectl delete Certificate ${IMAGE_NAME}-tls-secret -n sandbox > /dev/null 2>&1
+kubectl delete Certificate ${IMAGE_NAME} -n sandbox > /dev/null 2>&1
 
 kubectl create -f - <<EOF
 apiVersion: cert-manager.io/v1
@@ -65,10 +65,10 @@ spec:
   secretName: ${IMAGE_NAME}-tls-secret
 EOF
 sleep 5
-kubectl get certificates test-cert -oyaml
+#kubectl get certificates test-cert -oyaml
 
-kubectl get secret ${IMAGE_NAME}-tls-secret -o jsonpath='{ .data.tls\.crt }' | base64 -d | openssl x509 -text  > /tmp/tsl.crt
-kubectl get secret ${IMAGE_NAME}-tls-secret -o jsonpath='{ .data.ca\.crt }'  | base64 -d > /tmp/ca.crt
+kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.tls\.crt }' | base64 -d | openssl x509 -text  > /tmp/tsl.crt
+kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.ca\.crt }'  | base64 -d > /tmp/ca.crt
 
 echo "ca.crt"
 openssl storeutl -text -noout -certs /tmp/ca.crt | grep Subject:

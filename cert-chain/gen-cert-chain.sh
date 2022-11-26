@@ -57,7 +57,7 @@ if [ ! -f rootCA.key ]; then
     openssl genrsa -out domain.key 2048
     openssl req -new -sha256 \
         -key domain.key \
-        -subj /CN="cert-manager v1.0" \
+        -subj "/O=cert-manager/CN=${DOMAIN}" \
         -reqexts SAN \
         -extensions SAN \
         -config <(cat ${OPENSSL_CNF} \
