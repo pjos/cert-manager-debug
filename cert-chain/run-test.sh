@@ -7,9 +7,10 @@ minikube status > /dev/null || {
 # Create NS "sandbox" if needed
 kubectl get namespace sandbox > /dev/null 2>&1 || kubectl create namespace sandbox
 # Check if cert-manager installation is present
-kubectl get namespace cert-manager > /dev/null 2>&1 || \
-  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.1/cert-manager.yaml && \
+kubectl get namespace cert-manager > /dev/null 2>&1 || {
+  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.1/cert-manager.yaml 
   sleep 30
+}
 
 kubectl delete secret ca-key-pair -n cert-manager > /dev/null 2>&1
 kubectl delete clusterissuer ca-issuer -n cert-manager > /dev/null 2>&1

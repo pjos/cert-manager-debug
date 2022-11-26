@@ -61,7 +61,7 @@ if [ ! -f rootCA.key ]; then
         -reqexts SAN \
         -extensions SAN \
         -config <(cat ${OPENSSL_CNF} \
-          <(printf '[SAN]\nbasicConstraints=critical, CA:TRUE\nkeyUsage=keyCertSign, cRLSign, digitalSignature')) \
+          <(printf "\n[SAN]\nsubjectAltName=DNS:${DOMAIN}\nbasicConstraints=critical, CA:TRUE\nkeyUsage=digitalSignature, keyCertSign, cRLSign, keyEncipherment, keyAgreement, dataEncipherment\nextendedKeyUsage=serverAuth")) \
         -out domain.csr
 
     openssl x509 \
@@ -82,4 +82,4 @@ echo "--------------------------------------------------------------------------
 echo "openssl verify -x509_strict -CAfile rootCA.crt -untrusted intermediate.crt domain.crt"
 openssl verify -x509_strict -CAfile rootCA.crt -untrusted intermediate.crt domain.crt
 echo "------------------------------------------------------------------------------"
-
+openssl storeutl -text -noout -certs domain.crt
