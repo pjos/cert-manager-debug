@@ -18,13 +18,6 @@ kubectl delete clusterissuer ca-issuer -n cert-manager > /dev/null 2>&1
 kubectl create -f - <<EOF
 ---
 apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    kubernetes.io/metadata.name: sandbox
-  name: sandbox
----
-apiVersion: v1
 kind: Secret
 metadata:
   name: ca-key-pair
@@ -57,9 +50,9 @@ kind: Certificate
 metadata:
   name: ${IMAGE_NAME}
 spec:
-  commonName: nuc
+  commonName: "cert-manager issuer"
   dnsNames:
-    - nuc3
+    - nuc.domain.com
   issuerRef:
     kind: ClusterIssuer
     name: ca-issuer
@@ -68,10 +61,12 @@ EOF
 sleep 5
 #kubectl get certificates test-cert -oyaml
 
-kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.tls\.crt }' | base64 -d | openssl x509 -text  > /tmp/tsl.crt
-kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.ca\.crt }'  | base64 -d > /tmp/ca.crt
+kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.tls\.crt }' | base64 -d 2> /dev/null > /tmp/tls.crt
+kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.ca\.crt }'  | base64 -d 2> /dev/null > /tmp/ca.crt
 
 echo "ca.crt"
 openssl storeutl -text -noout -certs /tmp/ca.crt | grep Subject:
 echo "tls.crt"
 openssl storeutl -text -noout -certs /tmp/tls.crt | grep Subject:
+
+rm -f /tmp/ca.crt /tmp/tls.crt
