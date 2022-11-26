@@ -51,6 +51,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: ${IMAGE_NAME}
+  namespace: sandbox
 spec:
   commonName: "cert-manager issuer"
   dnsNames:
@@ -60,15 +61,62 @@ spec:
     name: ca-issuer
   secretName: ${IMAGE_NAME}-tls-secret
 EOF
+
+kubectl delete secret password-secret -n sandbox > /dev/null 2>&1
+kubectl delete certificate ${IMAGE_NAME}-jks -n sandbox > /dev/null 2>&1
+kubectl delete secret ${IMAGE_NAME}-jks-secret -n sandbox > /dev/null 2>&1
+
+kubectl create -f - <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: password-secret
+  namespace: sandbox
+type: Opaque
+data:
+  password: $(echo -n 'changeme' | base64)
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: 
+  name: ${IMAGE_NAME}-jks
+  namespace: sandbox
+spec:
+  secretName: ${IMAGE_NAME}-jks-secret
+  dnsNames:
+  - foo.example.com
+  - bar.example.com
+  issuerRef:
+    kind: ClusterIssuer
+    name: ca-issuer
+  keystores:
+    jks:
+      create: true
+      passwordSecretRef: # Password used to encrypt the keystore
+        key: password
+        name: password-secret
+    pkcs12:
+      create: true
+      passwordSecretRef: # Password used to encrypt the keystore
+        key: password
+        name: password-secret
+EOF
+
 sleep 5
 #kubectl get certificates test-cert -oyaml
 
 kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.tls\.crt }' | base64 -d 2> /dev/null > /tmp/tls.crt
 kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.ca\.crt }'  | base64 -d 2> /dev/null > /tmp/ca.crt
+kubectl get secret ${IMAGE_NAME}-jks-secret -n sandbox -o jsonpath='{ .data.truststore\.jks }'  | base64 -d 2> /dev/null > /tmp/truststore.jks
+kubectl get secret ${IMAGE_NAME}-jks-secret -n sandbox -o jsonpath='{ .data.keystore\.jks }'  | base64 -d 2> /dev/null > /tmp/keystore.jks
+
 
 echo "ca.crt"
 openssl storeutl -text -noout -certs /tmp/ca.crt | grep Subject:
 echo "tls.crt"
 openssl storeutl -text -noout -certs /tmp/tls.crt | grep Subject:
+echo "keystore.jks"
+keytool -list -keystore /tmp/keystore.jks -storepass changeme -v 2> /dev/null |grep Owner:
 
-rm -f /tmp/ca.crt /tmp/tls.crt
+rm -f /tmp/ca.crt /tmp/tls.crt /tmp/keystore.jks /tmp/truststore.jks  
