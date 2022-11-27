@@ -1,8 +1,16 @@
 #!/bin/bash
 
-minikube status > /dev/null || {
-    minikube start --addons=ingress --vm=true --memory=6144 --cpus=4
-} 
+# check if minikube is installed, if so, check if it's up and running
+type minikube > /dev/null 2>&1 && {
+  minikube status > /dev/null || {
+      minikube start --addons=ingress --vm=true --memory=6144 --cpus=4
+  } 
+}
+
+type kubectl > /dev/null 2>&1 || {
+  echo "[ERROR] Unable to find kubectl, aborting ...."
+  exit 1
+}
 
 # Create NS "sandbox" if needed
 kubectl get namespace sandbox > /dev/null 2>&1 || kubectl create namespace sandbox
@@ -16,30 +24,33 @@ kubectl get namespace cert-manager > /dev/null 2>&1 || {
 
 kubectl delete secret ca-key-pair -n cert-manager > /dev/null 2>&1
 kubectl delete clusterissuer ca-issuer -n cert-manager > /dev/null 2>&1
- 
+
+ISSUER_NS=sandbox
+ISSUER_KIND=Issuer
+
 kubectl create -f - <<EOF
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: ca-key-pair
-  namespace: cert-manager
+  namespace: ${ISSUER_NS}
 data:
   tls.crt: $(cat domain.crt | base64 -w0)
   tls.key: $(cat domain.key | base64 -w0)
 ---
 apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
+kind: ${ISSUER_KIND}
 metadata:
   name: ca-issuer
-  namespace: cert-manager
+  namespace: ${ISSUER_NS}
 spec:
   ca:
     secretName: ca-key-pair
 EOF
 
-echo "kubectl get issuers ca-issuer -n sandbox -o wide"
-kubectl get clusterissuers ca-issuer -n cert-manager -o wide
+echo "kubectl get ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} -o wide"
+kubectl get ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} -o wide
 
 
 export IMAGE_NAME=test-cert
@@ -57,7 +68,7 @@ spec:
   dnsNames:
     - nuc.domain.com
   issuerRef:
-    kind: ClusterIssuer
+    kind: ${ISSUER_KIND}
     name: ca-issuer
   secretName: ${IMAGE_NAME}-tls-secret
 EOF
@@ -88,7 +99,7 @@ spec:
   - foo.example.com
   - bar.example.com
   issuerRef:
-    kind: ClusterIssuer
+    kind: ${ISSUER_KIND}
     name: ca-issuer
   keystores:
     jks:
@@ -103,7 +114,7 @@ spec:
         name: password-secret
 EOF
 
-sleep 5
+sleep 3
 #kubectl get certificates test-cert -oyaml
 
 kubectl get secret ${IMAGE_NAME}-tls-secret -n sandbox -o jsonpath='{ .data.tls\.crt }' | base64 -d 2> /dev/null > /tmp/tls.crt
@@ -119,4 +130,13 @@ openssl storeutl -text -noout -certs /tmp/tls.crt | grep Subject:
 echo "keystore.jks"
 keytool -list -keystore /tmp/keystore.jks -storepass changeme -v 2> /dev/null |grep Owner:
 
-rm -f /tmp/ca.crt /tmp/tls.crt /tmp/keystore.jks /tmp/truststore.jks  
+
+if [ -z "$DEBUG" ]; then 
+  kubectl delete secret ${IMAGE_NAME}-tls-secret -n sandbox > /dev/null 2>&1
+  kubectl delete Certificate ${IMAGE_NAME} -n sandbox > /dev/null 2>&1  
+  kubectl delete ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} > /dev/null 2>&1
+  kubectl delete secret password-secret -n sandbox > /dev/null 2>&1
+  kubectl delete certificate ${IMAGE_NAME}-jks -n sandbox > /dev/null 2>&1
+  kubectl delete secret ${IMAGE_NAME}-jks-secret -n sandbox > /dev/null 2>&1
+  rm -f /tmp/ca.crt /tmp/tls.crt /tmp/keystore.jks /tmp/truststore.jks
+fi
