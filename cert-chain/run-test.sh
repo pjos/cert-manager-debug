@@ -138,5 +138,7 @@ if [ -z "$DEBUG" ]; then
   kubectl delete secret password-secret -n sandbox > /dev/null 2>&1
   kubectl delete certificate ${IMAGE_NAME}-jks -n sandbox > /dev/null 2>&1
   kubectl delete secret ${IMAGE_NAME}-jks-secret -n sandbox > /dev/null 2>&1
+  kubectl delete secret ca-key-pair -n ${ISSUER_NS}  > /dev/null 2>&1
+  kubectl delete namespace sandbox
   rm -f /tmp/ca.crt /tmp/tls.crt /tmp/keystore.jks /tmp/truststore.jks
 fi
