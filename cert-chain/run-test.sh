@@ -17,16 +17,16 @@ kubectl get namespace sandbox > /dev/null 2>&1 || kubectl create namespace sandb
 kubectl config set-context --current --namespace=sandbox
 
 # Check if cert-manager installation is present
-kubectl get namespace cert-manager > /dev/null 2>&1 || {
+kubectl get crd clusterissuers.cert-manager.io > /dev/null 2>&1 || {
   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.1/cert-manager.yaml 
   sleep 30
 }
 
-kubectl delete secret ca-key-pair -n cert-manager > /dev/null 2>&1
-kubectl delete clusterissuer ca-issuer -n cert-manager > /dev/null 2>&1
-
 ISSUER_NS=sandbox
 ISSUER_KIND=Issuer
+
+kubectl delete secret ca-key-pair -n ${ISSUER_NS}  > /dev/null 2>&1
+kubectl delete ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} > /dev/null 2>&1
 
 kubectl create -f - <<EOF
 ---
@@ -49,8 +49,8 @@ spec:
     secretName: ca-key-pair
 EOF
 
-echo "kubectl get ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} -o wide"
-kubectl get ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} -o wide
+#echo "kubectl get ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} -o wide"
+kubectl get ${ISSUER_KIND} ca-issuer -n ${ISSUER_NS} --no-headers -o wide
 
 
 export IMAGE_NAME=test-cert
